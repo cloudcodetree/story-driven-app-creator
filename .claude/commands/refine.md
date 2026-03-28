@@ -13,6 +13,60 @@ Read and internalize these files before starting:
 ### Input
 The user will provide a rough idea: $ARGUMENTS
 
+### Context Persistence
+
+**CRITICAL:** Before asking your first question, check if `sessions/[idea-slug]/context.md` exists.
+
+- **If it exists:** Read it. This is a previous session's state. Resume from where it left off.
+  Do NOT re-ask questions that are already answered in the context file. Greet the user with
+  a brief summary of where you left off and ask the next unanswered question.
+- **If it doesn't exist:** Create `sessions/[idea-slug]/context.md` and start fresh.
+
+**After EVERY user response**, update the context file immediately. The context file is your
+memory — if the session dies, a new session picks up from the last update.
+
+The context file format:
+
+```markdown
+# [Idea Name] — Refinement Context
+
+## Status
+- **Current stage**: [Problem Discovery | Market Reality | Core Value | User & Experience | Viability Check | Spec Generation]
+- **Last updated**: [timestamp]
+- **Questions asked**: [count]
+
+## Idea Summary
+[2-3 sentence evolving summary of the idea as currently understood]
+
+## Decisions Made
+- [Key decision or insight, one per line, in chronological order]
+
+## Current Stage Progress
+### Problem Discovery
+- [Question asked]: [Answer summary]
+
+### Market Reality
+- [Question asked]: [Answer summary]
+
+### Core Value Proposition
+- [Question asked]: [Answer summary]
+
+### User & Experience
+- [Question asked]: [Answer summary]
+
+### Viability Check
+- [Question asked]: [Answer summary]
+
+## Research Findings
+- [Any market research, competitor info, or data discovered]
+
+## Open Threads
+- [Things mentioned but not yet explored]
+
+## Next Question
+[The next question you plan to ask — so a new session knows exactly where to pick up]
+```
+
 ### Rules
 
 1. **ONE question at a time.** Never ask multiple questions. Never present a list of questions. Ask one, wait for the answer, then ask the next.
@@ -25,7 +79,7 @@ The user will provide a rough idea: $ARGUMENTS
 
 5. **Listen for problems, not solutions.** When the user describes a feature, ask what problem it solves. When they describe a target user as "everyone," push for specificity.
 
-6. **Track progress internally.** Know which areas you've covered and which remain. Don't re-ask things the user has already answered. When you've sufficiently explored all stages, move to spec generation.
+6. **Update context after every response.** Write to `sessions/[idea-slug]/context.md` after each user answer. This is your persistent memory. If the session dies, a new session resumes from this file. Never rely on conversation history alone — the context file is the source of truth.
 
 7. **Be honest about viability.** If something is a known hard problem (chicken-and-egg, cold start, etc.), name it and ask how they'd address it. Don't be discouraging — frame it as "here's a challenge worth thinking about."
 
@@ -84,4 +138,6 @@ When all stages are sufficiently explored, generate a structured spec. Save it t
 
 ### Starting the Conversation
 
-Begin by acknowledging the idea briefly, then ask your FIRST question — something that gets at the core problem behind the idea. Don't summarize the framework, don't explain your process. Just start the conversation naturally.
+1. Check if `sessions/[idea-slug]/context.md` exists.
+2. **If resuming:** Read the context file. Briefly tell the user where you left off ("Last time we established X, Y, Z. We were about to explore..."). Then ask the next question from the context file.
+3. **If new:** Create the context file with initial state. Acknowledge the idea briefly, then ask your FIRST question — something that gets at the core problem. Don't summarize the framework, don't explain your process. Just start naturally.
