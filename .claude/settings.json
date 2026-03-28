@@ -1,21 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Edit(sessions/**)",
-      "Edit(specs/**)",
-      "Edit(bible/**)",
-      "Edit(.claude/**)",
-      "Write(sessions/**)",
-      "Write(specs/**)",
-      "Write(bible/**)",
-      "Write(.claude/**)",
-      "Read(sessions/**)",
-      "Read(specs/**)",
-      "Read(bible/**)",
-      "Read(.claude/**)",
-      "Bash(git:*)",
-      "Bash(mkdir:*)",
-      "Bash(ls:*)"
+      "Edit(**)",
+      "Write(**)",
+      "Read(**)",
+      "Bash(*)"
     ]
   }
 }
