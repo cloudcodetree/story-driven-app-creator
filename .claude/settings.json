@@ -1,15 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Edit(sessions/**/*.md)",
-      "Edit(specs/**/*.md)",
-      "Edit(bible/**/*.md)",
-      "Write(sessions/**/*.md)",
-      "Write(specs/**/*.md)",
-      "Write(bible/**/*.md)",
-      "Read(sessions/**/*.md)",
-      "Read(specs/**/*.md)",
-      "Read(bible/**/*.md)"
+      "Edit(sessions/**)",
+      "Edit(specs/**)",
+      "Edit(bible/**)",
+      "Edit(.claude/**)",
+      "Write(sessions/**)",
+      "Write(specs/**)",
+      "Write(bible/**)",
+      "Write(.claude/**)",
+      "Read(sessions/**)",
+      "Read(specs/**)",
+      "Read(bible/**)",
+      "Read(.claude/**)",
+      "Bash(git:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)"
     ]
   }
 }
