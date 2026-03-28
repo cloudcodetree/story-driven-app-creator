@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Dead Signal — Morse Tap Prototype</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #222;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  #wpm {
+    font-size: 13px;
+    color: #888;
+  }
+
+  #output-area {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  #decoded-text {
+    font-size: 28px;
+    font-weight: 300;
+    line-height: 1.4;
+    min-height: 60px;
+    word-wrap: break-word;
+  }
+
+  #decoded-text .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 28px;
+    background: #4a9eff;
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  #morse-display {
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    color: #4a9eff;
+    letter-spacing: 4px;
+    min-height: 30px;
+  }
+
+  #timing-bar {
+    height: 4px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  #timing-fill {
+    height: 100%;
+    width: 0%;
+    background: #4a9eff;
+    transition: width 50ms linear;
+    border-radius: 2px;
+  }
+
+  #signal-area {
+    padding: 12px 20px;
+    border-top: 1px solid #222;
+  }
+
+  #signal-history {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    min-height: 24px;
+    flex-wrap: wrap;
+  }
+
+  .signal-dot {
+    height: 8px;
+    border-radius: 4px;
+    background: #4a9eff;
+    opacity: 0.7;
+  }
+
+  .signal-dot.dit { width: 8px; }
+  .signal-dot.dah { width: 24px; }
+  .signal-dot.letter-gap { width: 12px; background: transparent; }
+  .signal-dot.word-gap { width: 24px; background: transparent; }
+
+  #tap-area {
+    padding: 20px;
+    border-top: 1px solid #222;
+  }
+
+  #tap-btn {
+    width: 100%;
+    height: 120px;
+    border-radius: 16px;
+    border: 2px solid #333;
+    background: #141414;
+    color: #888;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.05s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #tap-btn.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+    transform: scale(0.98);
+  }
+
+  #controls {
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px 20px;
+  }
+
+  .ctrl-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    background: #1a1a1a;
+    color: #888;
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .ctrl-btn:active {
+    background: #2a2a2a;
+  }
+
+  #calibration-notice {
+    text-align: center;
+    font-size: 12px;
+    color: #555;
+    padding: 4px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>DEAD SIGNAL</h1>
+    <span id="wpm">-- WPM</span>
+  </header>
+
+  <div id="output-area">
+    <div id="decoded-text"><span class="cursor"></span></div>
+    <div id="morse-display"></div>
+    <div id="timing-bar"><div id="timing-fill"></div></div>
+  </div>
+
+  <div id="signal-area">
+    <div id="signal-history"></div>
+  </div>
+
+  <div id="calibration-notice">Tap a few times to calibrate speed</div>
+
+  <div id="tap-area">
+    <button id="tap-btn">HOLD TO SIGNAL</button>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl-btn" id="space-btn">SPACE</button>
+    <button class="ctrl-btn" id="backspace-btn">DELETE</button>
+    <button class="ctrl-btn" id="clear-btn">CLEAR</button>
+  </div>
+
+<script>
+const MORSE_TABLE = {
+  '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+  '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+  '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+  '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+  '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+  '--..': 'Z',
+  '-----': '0', '.----': '1', '..---': '2', '...--': '3',
+  '....-': '4', '.....': '5', '-....': '6', '--...': '7',
+  '---..': '8', '----.': '9',
+  '.-.-.-': '.', '--..--': ',', '..--..': '?', '.----.': "'",
+  '-.-.--': '!', '-..-.': '/', '-.--.': '(', '-.--.-': ')',
+  '.-...': '&', '---...': ':', '-.-.-.': ';', '-...-': '=',
+  '.-.-.': '+', '-....-': '-', '..--.-': '_', '.-..-.': '"',
+  '...-..-': '$', '.--.-.': '@', '...---...': 'SOS'
+};
+
+// Adaptive timing state
+const state = {
+  isDown: false,
+  pressStart: 0,
+  releaseStart: 0,
+  currentMorse: '',
+  decodedText: '',
+  signals: [],       // history of { type: 'dit'|'dah', duration: ms }
+  ditDurations: [],  // rolling window for adaptive threshold
+  dahDurations: [],
+  threshold: 200,    // initial dit/dah boundary in ms (adapts)
+  letterTimeout: null,
+  wordTimeout: null,
+  timingInterval: null,
+  calibrated: false
+};
+
+// DOM refs
+const tapBtn = document.getElementById('tap-btn');
+const decodedText = document.getElementById('decoded-text');
+const morseDisplay = document.getElementById('morse-display');
+const timingFill = document.getElementById('timing-fill');
+const signalHistory = document.getElementById('signal-history');
+const wpmDisplay = document.getElementById('wpm');
+const calibrationNotice = document.getElementById('calibration-notice');
+
+// Adaptive threshold: use the midpoint between average dit and average dah
+function updateThreshold(duration, type) {
+  if (type === 'dit') {
+    state.ditDurations.push(duration);
+    if (state.ditDurations.length > 20) state.ditDurations.shift();
+  } else {
+    state.dahDurations.push(duration);
+    if (state.dahDurations.length > 20) state.dahDurations.shift();
+  }
+
+  if (state.ditDurations.length >= 2 && state.dahDurations.length >= 1) {
+    const avgDit = state.ditDurations.reduce((a, b) => a + b) / state.ditDurations.length;
+    const avgDah = state.dahDurations.reduce((a, b) => a + b) / state.dahDurations.length;
+    state.threshold = (avgDit + avgDah) / 2;
+
+    // Calculate WPM: PARIS standard = 50 dit units per word
+    const ditMs = avgDit;
+    const wpm = Math.round(1200 / ditMs);
+    wpmDisplay.textContent = `${wpm} WPM`;
+
+    if (!state.calibrated) {
+      state.calibrated = true;
+      calibrationNotice.textContent = 'Calibrated — adapting to your speed';
+      setTimeout(() => { calibrationNotice.style.opacity = '0'; }, 2000);
+    }
+  }
+}
+
+function classifyPress(duration) {
+  return duration < state.threshold ? 'dit' : 'dah';
+}
+
+function addSignal(type) {
+  const dot = document.createElement('div');
+  dot.className = `signal-dot ${type}`;
+  signalHistory.appendChild(dot);
+
+  // Keep signal history manageable
+  while (signalHistory.children.length > 60) {
+    signalHistory.removeChild(signalHistory.firstChild);
+  }
+}
+
+function commitLetter() {
+  if (!state.currentMorse) return;
+
+  const letter = MORSE_TABLE[state.currentMorse];
+  if (letter) {
+    state.decodedText += letter;
+  } else {
+    state.decodedText += '?';
+  }
+  state.currentMorse = '';
+  morseDisplay.textContent = '';
+  updateDecodedDisplay();
+  addSignal('letter-gap');
+}
+
+function commitWord() {
+  if (state.decodedText.length > 0 && !state.decodedText.endsWith(' ')) {
+    state.decodedText += ' ';
+    updateDecodedDisplay();
+    addSignal('word-gap');
+  }
+}
+
+function updateDecodedDisplay() {
+  decodedText.innerHTML = escapeHtml(state.decodedText) + '<span class="cursor"></span>';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Press start
+function onPressStart(e) {
+  e.preventDefault();
+  if (state.isDown) return;
+
+  state.isDown = true;
+  state.pressStart = performance.now();
+  tapBtn.classList.add('active');
+  tapBtn.textContent = '●';
+
+  // Clear pending letter/word commits
+  clearTimeout(state.letterTimeout);
+  clearTimeout(state.wordTimeout);
+
+  // Start timing bar animation
+  startTimingBar();
+}
+
+// Press end
+function onPressEnd(e) {
+  e.preventDefault();
+  if (!state.isDown) return;
+
+  state.isDown = false;
+  const duration = performance.now() - state.pressStart;
+  state.releaseStart = performance.now();
+  tapBtn.classList.remove('active');
+  tapBtn.textContent = 'HOLD TO SIGNAL';
+
+  stopTimingBar();
+
+  // Ignore very short accidental taps
+  if (duration < 30) return;
+
+  // Classify and record
+  const type = classifyPress(duration);
+  const symbol = type === 'dit' ? '.' : '-';
+  state.currentMorse += symbol;
+  morseDisplay.textContent = state.currentMorse;
+
+  updateThreshold(duration, type);
+  addSignal(type);
+
+  // Vibrate feedback
+  if (navigator.vibrate) {
+    navigator.vibrate(type === 'dit' ? 30 : 80);
+  }
+
+  // Set timeouts for letter and word gaps
+  // Letter gap = 3 dit units, word gap = 7 dit units
+  const ditUnit = state.ditDurations.length > 0
+    ? state.ditDurations.reduce((a, b) => a + b) / state.ditDurations.length
+    : 150;
+
+  state.letterTimeout = setTimeout(() => {
+    commitLetter();
+  }, ditUnit * 3);
+
+  state.wordTimeout = setTimeout(() => {
+    commitWord();
+  }, ditUnit * 7);
+}
+
+// Timing bar — shows hold duration relative to threshold
+function startTimingBar() {
+  const start = performance.now();
+  state.timingInterval = setInterval(() => {
+    const elapsed = performance.now() - start;
+    // Map to 0-100% where threshold is at 50%
+    const pct = Math.min((elapsed / (state.threshold * 2)) * 100, 100);
+    timingFill.style.width = pct + '%';
+    timingFill.style.background = elapsed < state.threshold ? '#4a9eff' : '#ff6b4a';
+  }, 16);
+}
+
+function stopTimingBar() {
+  clearInterval(state.timingInterval);
+  timingFill.style.width = '0%';
+  timingFill.style.background = '#4a9eff';
+}
+
+// Tap button events — both mouse and touch
+tapBtn.addEventListener('mousedown', onPressStart);
+tapBtn.addEventListener('mouseup', onPressEnd);
+tapBtn.addEventListener('mouseleave', (e) => { if (state.isDown) onPressEnd(e); });
+tapBtn.addEventListener('touchstart', onPressStart, { passive: false });
+tapBtn.addEventListener('touchend', onPressEnd, { passive: false });
+tapBtn.addEventListener('touchcancel', onPressEnd, { passive: false });
+
+// Prevent context menu on long press (mobile)
+tapBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Control buttons
+document.getElementById('space-btn').addEventListener('click', () => {
+  clearTimeout(state.letterTimeout);
+  clearTimeout(state.wordTimeout);
+  commitLetter();
+  commitWord();
+});
+
+document.getElementById('backspace-btn').addEventListener('click', () => {
+  if (state.currentMorse) {
+    state.currentMorse = state.currentMorse.slice(0, -1);
+    morseDisplay.textContent = state.currentMorse;
+  } else if (state.decodedText) {
+    state.decodedText = state.decodedText.slice(0, -1);
+    updateDecodedDisplay();
+  }
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  state.currentMorse = '';
+  state.decodedText = '';
+  morseDisplay.textContent = '';
+  signalHistory.innerHTML = '';
+  updateDecodedDisplay();
+});
+
+// Keyboard support — spacebar as tap
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && !e.repeat) {
+    e.preventDefault();
+    onPressStart(e);
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    onPressEnd(e);
+  }
+});
+
+// Initial display
+updateDecodedDisplay();
+</script>
+</body>
+</html>
