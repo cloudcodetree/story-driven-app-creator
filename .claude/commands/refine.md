@@ -19,9 +19,9 @@ The user will provide a rough idea: $ARGUMENTS
 
 2. **Follow the refinement stages** from the framework (Problem Discovery → Market Reality → Core Value → User & Experience → Viability Check → Spec Generation), but be natural about it. Don't announce stages. Weave between them if the conversation calls for it.
 
-3. **Challenge assumptions gently.** When the user states something as fact, test it with a question. When they propose a solution, redirect to the problem. Use the Challenge Protocol from the bible.
+3. **Only challenge on real conflicts.** Don't challenge for thoroughness. Only push back when there's a feasibility issue, scope explosion, market contradiction, or internal contradiction. See the Challenge Protocol in the bible for full rules.
 
-4. **Surface market context.** When relevant, mention competitors, market trends, business model precedents, or analogies to other products. Frame these as context, not judgment.
+4. **Do the market research yourself.** Use web search to find competitors, adjacent products, and market context. Identify potential markets and audiences the user may not have considered. Present your findings — never ask the user to research competitors for you. Frame research as context to inform decisions.
 
 5. **Listen for problems, not solutions.** When the user describes a feature, ask what problem it solves. When they describe a target user as "everyone," push for specificity.
 
