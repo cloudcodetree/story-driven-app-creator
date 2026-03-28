@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(sessions/**/*.md)",
+      "Edit(specs/**/*.md)",
+      "Edit(bible/**/*.md)",
+      "Write(sessions/**/*.md)",
+      "Write(specs/**/*.md)",
+      "Write(bible/**/*.md)",
+      "Read(sessions/**/*.md)",
+      "Read(specs/**/*.md)",
+      "Read(bible/**/*.md)"
+    ]
+  }
+}
