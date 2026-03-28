@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead Signal — How Detection Works</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  h2 { font-size: 18px; color: #4a9eff; margin: 32px 0 12px; }
+  h3 { font-size: 15px; color: #888; margin: 20px 0 8px; }
+  p { font-size: 14px; color: #aaa; margin-bottom: 12px; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 32px; }
+
+  /* Diagram containers */
+  .diagram {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+
+  /* Timeline visualization */
+  canvas { display: block; margin: 0 auto; }
+
+  /* Algorithm cards */
+  .algo-card {
+    background: #141414;
+    border: 1px solid #222;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 12px 0;
+  }
+  .algo-card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #4a9eff;
+    margin-bottom: 8px;
+  }
+  .algo-card code {
+    font-family: 'Courier New', monospace;
+    background: #1a1a1a;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #e0e0e0;
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+  }
+  .flow-box {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    text-align: center;
+    min-width: 100px;
+  }
+  .flow-box.highlight {
+    border-color: #4a9eff;
+    color: #4a9eff;
+  }
+  .flow-box.decision {
+    border-color: #ff6b4a;
+    color: #ff6b4a;
+    transform: rotate(0deg);
+    border-radius: 4px;
+    border-width: 2px;
+  }
+  .flow-arrow {
+    color: #444;
+    font-size: 18px;
+  }
+
+  /* Interactive demo */
+  #demo-area {
+    text-align: center;
+    margin: 20px 0;
+  }
+  #demo-btn {
+    width: 200px;
+    height: 80px;
+    border-radius: 12px;
+    border: 2px solid #333;
+    background: #141414;
+    color: #888;
+    font-size: 14px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #demo-btn.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+  }
+  #demo-output {
+    margin-top: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    min-height: 200px;
+    text-align: left;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 12px;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    max-height: 300px;
+  }
+  .log-time { color: #555; }
+  .log-dit { color: #4a9eff; }
+  .log-dah { color: #ff6b4a; }
+  .log-threshold { color: #ffd700; }
+  .log-letter { color: #4aff8b; }
+  .log-word { color: #ff4aff; }
+
+  /* Threshold visualization */
+  #threshold-viz {
+    position: relative;
+    height: 120px;
+    margin: 16px 0;
+  }
+  .thresh-bar {
+    position: absolute;
+    bottom: 0;
+    width: 24px;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.3s ease;
+  }
+  #thresh-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #ffd700;
+    transition: bottom 0.3s ease;
+  }
+  #thresh-label {
+    position: absolute;
+    right: 0;
+    color: #ffd700;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    transition: bottom 0.3s ease;
+  }
+
+  .nav-link {
+    display: inline-block;
+    margin-top: 32px;
+    color: #4a9eff;
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .nav-link:hover { text-decoration: underline; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 8px 0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #888;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<h1>How Dead Signal Detects Morse Code</h1>
+<p class="subtitle">A visual breakdown of the algorithms behind real-time tap-to-text translation</p>
+
+<!-- ───── SECTION 1: THE PIPELINE ───── -->
+<h2>1. The Detection Pipeline</h2>
+<p>Every tap flows through this pipeline in real-time:</p>
+
+<div class="diagram">
+  <div class="flow">
+    <div class="flow-box highlight">Touch Start<br><small>timestamp</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box highlight">Touch End<br><small>timestamp</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Duration<br><small>end - start</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box decision">≶ threshold?</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Dit · or Dah −</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box">Buffer<br><small>".-."</small></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box decision">Gap timeout?</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-box highlight">Lookup<br><small>".-." → R</small></div>
+  </div>
+</div>
+
+<!-- ───── SECTION 2: ADAPTIVE THRESHOLD ───── -->
+<h2>2. Adaptive Threshold</h2>
+<p>The hardest problem: everyone taps at different speeds. A "long" press for a fast tapper might be shorter than a "short" press for a slow one. The system adapts by tracking your actual timing.</p>
+
+<div class="algo-card">
+  <div class="label">Algorithm — Rolling Average Midpoint</div>
+  <p>Two sliding windows (max 20 samples each) track recent dit and dah durations. The threshold is the midpoint between their averages:</p>
+  <p><code>threshold = (avg_dit + avg_dah) / 2</code></p>
+  <p>This means the boundary automatically shifts as you speed up or slow down. Initial threshold is 200ms until enough samples are collected.</p>
+</div>
+
+<div class="diagram">
+  <h3>Live Threshold Visualization</h3>
+  <p style="font-size:12px; color:#555;">Tap the button below — watch the bars and threshold line adapt</p>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4a9eff"></div> Dit (short)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff6b4a"></div> Dah (long)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffd700"></div> Threshold</div>
+  </div>
+  <div id="threshold-viz">
+    <div id="thresh-line" style="bottom: 50%"></div>
+    <div id="thresh-label" style="bottom: 52%">200ms</div>
+  </div>
+</div>
+
+<!-- ───── SECTION 3: GAP DETECTION ───── -->
+<h2>3. Gap Detection (Timeouts)</h2>
+<p>Morse code uses silence to separate letters and words. But how long is "silence"? It depends on the sender's speed.</p>
+
+<div class="algo-card">
+  <div class="label">Algorithm — Proportional Timeouts</div>
+  <p>Standard morse timing is proportional to the dit length:</p>
+  <p>
+    <code>letter gap = 3 × avg_dit</code><br>
+    <code>word gap = 7 × avg_dit</code>
+  </p>
+  <p>After each release, two timers start. If you tap again, both cancel. If you don't:</p>
+  <p>• After 3× dit → commit the current buffer as a letter<br>
+     • After 7× dit → insert a space (word boundary)</p>
+</div>
+
+<div class="diagram">
+  <h3>Timing Diagram</h3>
+  <canvas id="timing-canvas" width="760" height="160"></canvas>
+  <p style="font-size:11px; color:#555; text-align:center; margin-top:8px;">
+    Example: "HI" = ···· (pause) ·· (long pause) at ~15 WPM
+  </p>
+</div>
+
+<!-- ───── SECTION 4: LOOKUP ───── -->
+<h2>4. Morse Lookup (Hash Map)</h2>
+<p>Once a letter is committed, the dot-dash string is looked up in a hash map. O(1) — instant.</p>
+
+<div class="algo-card">
+  <div class="label">Data Structure — Object/Hash Map</div>
+  <p><code>{ ".-": "A", "-...": "B", "-.-.": "C", ... }</code></p>
+  <p>54 entries covering A-Z, 0-9, and punctuation. If the pattern doesn't match anything, it shows <code>?</code> — which is useful feedback for learning.</p>
+</div>
+
+<div class="diagram">
+  <h3>Morse Tree</h3>
+  <p style="font-size:12px; color:#555; margin-bottom:12px;">Every left branch is a dit (·), every right branch is a dah (−)</p>
+  <canvas id="tree-canvas" width="760" height="320"></canvas>
+</div>
+
+<!-- ───── SECTION 5: INTERACTIVE DEMO ───── -->
+<h2>5. Try It — See the Algorithm Think</h2>
+<p>Tap the button and watch every decision the algorithm makes in real-time:</p>
+
+<div id="demo-area">
+  <button id="demo-btn">HOLD TO TAP</button>
+  <div id="demo-output"></div>
+</div>
+
+<a class="nav-link" href="index.html">← Back to Dead Signal prototype</a>
+
+<script>
+// ───── TIMING DIAGRAM (static) ─────
+function drawTimingDiagram() {
+  const canvas = document.getElementById('timing-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, w, h);
+
+  const ditLen = 40;
+  const dahLen = ditLen * 3;
+  const gap = ditLen;
+  const letterGap = ditLen * 3;
+  const wordGap = ditLen * 7;
+  const high = 40, low = 100, barH = 40;
+  let x = 40;
+
+  function drawPulse(len, label) {
+    ctx.fillStyle = len === ditLen ? '#4a9eff' : '#ff6b4a';
+    ctx.fillRect(x, high, len, barH);
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + len/2, high - 6);
+    x += len;
+  }
+
+  function drawGap(len, label, color) {
+    // Draw bracket
+    const midY = high + barH + 20;
+    ctx.strokeStyle = color || '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, high + barH + 4);
+    ctx.lineTo(x + 2, midY);
+    ctx.lineTo(x + len - 2, midY);
+    ctx.lineTo(x + len - 2, high + barH + 4);
+    ctx.stroke();
+    if (label) {
+      ctx.fillStyle = color || '#555';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x + len/2, midY + 14);
+    }
+    x += len;
+  }
+
+  // Draw baseline
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(30, high + barH);
+  ctx.lineTo(w - 10, high + barH);
+  ctx.stroke();
+
+  // "H" = ····
+  ctx.fillStyle = '#4aff8b';
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+
+  const hStart = x;
+  drawPulse(ditLen, '·'); drawGap(gap, '', '#222');
+  drawPulse(ditLen, '·'); drawGap(gap, '', '#222');
+  drawPulse(ditLen, '·'); drawGap(gap, '', '#222');
+  drawPulse(ditLen, '·');
+  ctx.fillText('H', (hStart + x) / 2, low + 50);
+
+  drawGap(letterGap, '3× dit = letter gap', '#ffd700');
+
+  // "I" = ··
+  const iStart = x;
+  drawPulse(ditLen, '·'); drawGap(gap, '', '#222');
+  drawPulse(ditLen, '·');
+  ctx.fillText('I', (iStart + x) / 2, low + 50);
+
+  drawGap(wordGap, '7× dit = word gap', '#ff4aff');
+
+  // Labels
+  ctx.fillStyle = '#333';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('signal', 0, high + barH/2 + 4);
+  ctx.fillText('time →', w - 50, high + barH + 14);
+}
+
+// ───── MORSE TREE ─────
+function drawMorseTree() {
+  const canvas = document.getElementById('tree-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, w, h);
+
+  // Tree data: [char, left-child-index, right-child-index]
+  // Level 0: root (START), Level 1: E, T, Level 2: I, A, N, M, etc.
+  const tree = [
+    { char: '▶', x: w/2, y: 25 },  // root
+    { char: 'E', x: w/4, y: 85 },   // dit from root
+    { char: 'T', x: 3*w/4, y: 85 }, // dah from root
+    { char: 'I', x: w/8, y: 145 },
+    { char: 'A', x: 3*w/8, y: 145 },
+    { char: 'N', x: 5*w/8, y: 145 },
+    { char: 'M', x: 7*w/8, y: 145 },
+    { char: 'S', x: w/16, y: 210 },
+    { char: 'U', x: 3*w/16, y: 210 },
+    { char: 'R', x: 5*w/16, y: 210 },
+    { char: 'W', x: 7*w/16, y: 210 },
+    { char: 'D', x: 9*w/16, y: 210 },
+    { char: 'K', x: 11*w/16, y: 210 },
+    { char: 'G', x: 13*w/16, y: 210 },
+    { char: 'O', x: 15*w/16, y: 210 },
+    // Level 4
+    { char: 'H', x: w/32, y: 275 },
+    { char: 'V', x: 3*w/32, y: 275 },
+    { char: 'F', x: 5*w/32, y: 275 },
+    { char: 'Ü', x: 7*w/32, y: 275 },
+    { char: 'L', x: 9*w/32, y: 275 },
+    { char: 'Ä', x: 11*w/32, y: 275 },
+    { char: 'P', x: 13*w/32, y: 275 },
+    { char: 'J', x: 15*w/32, y: 275 },
+    { char: 'B', x: 17*w/32, y: 275 },
+    { char: 'X', x: 19*w/32, y: 275 },
+    { char: 'C', x: 21*w/32, y: 275 },
+    { char: 'Y', x: 23*w/32, y: 275 },
+    { char: 'Z', x: 25*w/32, y: 275 },
+    { char: 'Q', x: 27*w/32, y: 275 },
+    { char: 'Ö', x: 29*w/32, y: 275 },
+    { char: '·', x: 31*w/32, y: 275 },
+  ];
+
+  // Parent-child relationships: parent index → [left, right]
+  const edges = [
+    [0, 1], [0, 2],     // root → E, T
+    [1, 3], [1, 4],     // E → I, A
+    [2, 5], [2, 6],     // T → N, M
+    [3, 7], [3, 8],     // I → S, U
+    [4, 9], [4, 10],    // A → R, W
+    [5, 11], [5, 12],   // N → D, K
+    [6, 13], [6, 14],   // M → G, O
+    [7, 15], [7, 16],   // S → H, V
+    [8, 17], [8, 18],   // U → F, Ü
+    [9, 19], [9, 20],   // R → L, Ä
+    [10, 21], [10, 22], // W → P, J
+    [11, 23], [11, 24], // D → B, X
+    [12, 25], [12, 26], // K → C, Y
+    [13, 27], [13, 28], // G → Z, Q
+    [14, 29], [14, 30], // O → Ö, ·
+  ];
+
+  // Draw edges
+  edges.forEach(([pi, ci], idx) => {
+    const p = tree[pi], c = tree[ci];
+    const isLeft = idx % 2 === 0;
+    ctx.strokeStyle = isLeft ? '#1a4a7a' : '#7a2a1a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y + 12);
+    ctx.lineTo(c.x, c.y - 12);
+    ctx.stroke();
+
+    // Edge label
+    const mx = (p.x + c.x) / 2;
+    const my = (p.y + c.y) / 2;
+    ctx.fillStyle = isLeft ? '#4a9eff' : '#ff6b4a';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(isLeft ? '·' : '−', mx + (isLeft ? -8 : 8), my);
+  });
+
+  // Draw nodes
+  tree.forEach((node, i) => {
+    const r = i === 0 ? 14 : (node.y > 250 ? 11 : 13);
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? '#222' : '#1a1a1a';
+    ctx.fill();
+    ctx.strokeStyle = i === 0 ? '#4a9eff' : '#333';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = i === 0 ? '#4a9eff' : '#e0e0e0';
+    ctx.font = `${i === 0 ? 10 : (node.y > 250 ? 10 : 12)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.char, node.x, node.y);
+  });
+
+  // Legend
+  ctx.fillStyle = '#4a9eff';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('← · dit (left)', 10, h - 10);
+  ctx.fillStyle = '#ff6b4a';
+  ctx.textAlign = 'right';
+  ctx.fillText('− dah (right) →', w - 10, h - 10);
+}
+
+// ───── INTERACTIVE DEMO ─────
+const demoBtn = document.getElementById('demo-btn');
+const demoOutput = document.getElementById('demo-output');
+const threshViz = document.getElementById('threshold-viz');
+const threshLine = document.getElementById('thresh-line');
+const threshLabel = document.getElementById('thresh-label');
+
+const demo = {
+  isDown: false,
+  pressStart: 0,
+  ditDurations: [],
+  dahDurations: [],
+  threshold: 200,
+  currentMorse: '',
+  letterTimeout: null,
+  wordTimeout: null,
+  barIndex: 0,
+  decoded: ''
+};
+
+const MORSE = {
+  '.-':'A','-...':'B','-.-.':'C','-..':'D','.':'E','..-.':'F',
+  '--.':'G','....':'H','..':'I','.---':'J','-.-':'K','.-..':'L',
+  '--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q','.-.':'R',
+  '...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X',
+  '-.--':'Y','--..':'Z'
+};
+
+function log(html) {
+  demoOutput.innerHTML += html + '\n';
+  demoOutput.scrollTop = demoOutput.scrollHeight;
+}
+
+function addThreshBar(duration, type) {
+  const maxH = 110;
+  const scale = maxH / (demo.threshold * 3);
+  const h = Math.min(duration * scale, maxH);
+  const bar = document.createElement('div');
+  bar.className = 'thresh-bar';
+  bar.style.left = (demo.barIndex * 30 + 4) + 'px';
+  bar.style.height = h + 'px';
+  bar.style.background = type === 'dit' ? '#4a9eff' : '#ff6b4a';
+
+  // Remove old bars if too many
+  const bars = threshViz.querySelectorAll('.thresh-bar');
+  if (bars.length > 20) bars[0].remove();
+
+  threshViz.appendChild(bar);
+  demo.barIndex++;
+
+  // Update threshold line
+  const lineH = demo.threshold * scale;
+  threshLine.style.bottom = lineH + 'px';
+  threshLabel.style.bottom = (lineH + 4) + 'px';
+  threshLabel.textContent = Math.round(demo.threshold) + 'ms';
+}
+
+demoBtn.addEventListener('mousedown', onDemoStart);
+demoBtn.addEventListener('mouseup', onDemoEnd);
+demoBtn.addEventListener('mouseleave', (e) => { if (demo.isDown) onDemoEnd(e); });
+demoBtn.addEventListener('touchstart', onDemoStart, { passive: false });
+demoBtn.addEventListener('touchend', onDemoEnd, { passive: false });
+demoBtn.addEventListener('touchcancel', onDemoEnd, { passive: false });
+demoBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function onDemoStart(e) {
+  e.preventDefault();
+  if (demo.isDown) return;
+  demo.isDown = true;
+  demo.pressStart = performance.now();
+  demoBtn.classList.add('active');
+  demoBtn.textContent = '●';
+  clearTimeout(demo.letterTimeout);
+  clearTimeout(demo.wordTimeout);
+  log('<span class="log-time">[' + new Date().toISOString().substr(17, 6) + ']</span> ⬇ press start');
+}
+
+function onDemoEnd(e) {
+  e.preventDefault();
+  if (!demo.isDown) return;
+  demo.isDown = false;
+  const duration = performance.now() - demo.pressStart;
+  demoBtn.classList.remove('active');
+  demoBtn.textContent = 'HOLD TO TAP';
+
+  if (duration < 30) { log('<span class="log-time">[skip]</span> too short (' + Math.round(duration) + 'ms)'); return; }
+
+  const type = duration < demo.threshold ? 'dit' : 'dah';
+  const symbol = type === 'dit' ? '·' : '−';
+
+  // Update threshold
+  if (type === 'dit') {
+    demo.ditDurations.push(duration);
+    if (demo.ditDurations.length > 20) demo.ditDurations.shift();
+  } else {
+    demo.dahDurations.push(duration);
+    if (demo.dahDurations.length > 20) demo.dahDurations.shift();
+  }
+
+  const oldThresh = demo.threshold;
+  if (demo.ditDurations.length >= 2 && demo.dahDurations.length >= 1) {
+    const avgDit = demo.ditDurations.reduce((a, b) => a + b) / demo.ditDurations.length;
+    const avgDah = demo.dahDurations.reduce((a, b) => a + b) / demo.dahDurations.length;
+    demo.threshold = (avgDit + avgDah) / 2;
+  }
+
+  demo.currentMorse += (type === 'dit' ? '.' : '-');
+  addThreshBar(duration, type);
+
+  const typeClass = type === 'dit' ? 'log-dit' : 'log-dah';
+  log('<span class="log-time">[' + new Date().toISOString().substr(17, 6) + ']</span> ⬆ release: <span class="' + typeClass + '">' + Math.round(duration) + 'ms → ' + symbol + ' (' + type + ')</span>  buffer: "' + demo.currentMorse + '"');
+
+  if (Math.abs(demo.threshold - oldThresh) > 1) {
+    log('  <span class="log-threshold">⟳ threshold adjusted: ' + Math.round(oldThresh) + 'ms → ' + Math.round(demo.threshold) + 'ms</span>');
+  }
+
+  const ditUnit = demo.ditDurations.length > 0
+    ? demo.ditDurations.reduce((a, b) => a + b) / demo.ditDurations.length : 150;
+
+  demo.letterTimeout = setTimeout(() => {
+    const letter = MORSE[demo.currentMorse] || '?';
+    demo.decoded += letter;
+    log('  <span class="log-letter">✓ letter gap (' + Math.round(ditUnit * 3) + 'ms): "' + demo.currentMorse + '" → ' + letter + '</span>  decoded: "' + demo.decoded + '"');
+    demo.currentMorse = '';
+  }, ditUnit * 3);
+
+  demo.wordTimeout = setTimeout(() => {
+    demo.decoded += ' ';
+    log('  <span class="log-word">⎵ word gap (' + Math.round(ditUnit * 7) + 'ms): space inserted</span>  decoded: "' + demo.decoded + '"');
+  }, ditUnit * 7);
+}
+
+// Draw static diagrams on load
+drawTimingDiagram();
+drawMorseTree();
+</script>
+
+</body>
+</html>
