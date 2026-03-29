@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead Signal — Sliding Window Threshold</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    padding: 20px;
+    max-width: 860px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 16px; color: #4a9eff; margin: 28px 0 10px; }
+  p { font-size: 14px; color: #aaa; margin-bottom: 12px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 28px; }
+  code {
+    font-family: 'Courier New', monospace;
+    background: #1a1a1a;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .diagram-box {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+  }
+
+  /* Array visualization */
+  .array-section {
+    margin: 16px 0;
+  }
+  .array-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .array-label .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .array-row {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 80px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #222;
+    position: relative;
+  }
+  .array-cell {
+    flex: 1;
+    min-width: 28px;
+    max-width: 38px;
+    border-radius: 3px 3px 0 0;
+    position: relative;
+    transition: height 0.3s ease, opacity 0.3s ease;
+    cursor: default;
+  }
+  .array-cell .val {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    color: #666;
+    white-space: nowrap;
+  }
+  .array-cell.fading { opacity: 0.3; }
+  .array-cell.newest { box-shadow: 0 0 8px rgba(255,255,255,0.15); }
+  .array-avg-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    transition: bottom 0.3s ease;
+    z-index: 2;
+  }
+  .array-avg-label {
+    position: absolute;
+    right: -60px;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    transition: bottom 0.3s ease;
+    z-index: 2;
+  }
+  .array-index-row {
+    display: flex;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .array-index {
+    flex: 1;
+    min-width: 28px;
+    max-width: 38px;
+    text-align: center;
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    color: #444;
+  }
+
+  /* Threshold result */
+  .threshold-result {
+    text-align: center;
+    padding: 16px;
+    margin: 16px 0;
+    border: 2px solid #333;
+    border-radius: 10px;
+    background: #0d0d0d;
+  }
+  .threshold-formula {
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    color: #ffd700;
+    margin: 8px 0;
+  }
+  .threshold-value {
+    font-size: 32px;
+    font-weight: 300;
+    color: #ffd700;
+  }
+  .threshold-unit {
+    font-size: 14px;
+    color: #888;
+  }
+
+  /* Number line */
+  #number-line {
+    position: relative;
+    height: 80px;
+    margin: 20px 10px;
+  }
+  #number-line-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 40px;
+    height: 4px;
+    background: #222;
+    border-radius: 2px;
+  }
+  .nl-marker {
+    position: absolute;
+    top: 28px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    transition: left 0.4s ease;
+    z-index: 3;
+  }
+  .nl-marker .nl-label {
+    position: absolute;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    left: 50%;
+  }
+  .nl-marker .nl-label.above { bottom: 22px; }
+  .nl-marker .nl-label.below { top: 22px; }
+  .nl-zone {
+    position: absolute;
+    top: 38px;
+    height: 8px;
+    border-radius: 4px;
+    opacity: 0.3;
+    transition: all 0.4s ease;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #1a1a1a;
+    color: #888;
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .ctrl-btn:active { background: #2a2a2a; }
+  .ctrl-btn.primary { border-color: #4a9eff; color: #4a9eff; }
+  .ctrl-btn.danger { border-color: #ff6b4a; color: #ff6b4a; }
+
+  /* Step explanation */
+  .step-log {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 180px;
+    overflow-y: auto;
+    margin: 12px 0;
+  }
+  .step-log div { margin: 2px 0; }
+  .s-dit { color: #4a9eff; }
+  .s-dah { color: #ff6b4a; }
+  .s-thresh { color: #ffd700; }
+  .s-evict { color: #555; }
+  .s-info { color: #888; }
+
+  /* Phase labels */
+  .phase {
+    display: inline-block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  .phase.cold { background: #1a1a2a; color: #8888ff; }
+  .phase.warm { background: #2a2a1a; color: #ffdd88; }
+  .phase.hot { background: #2a1a1a; color: #ff8888; }
+
+  .nav-link {
+    display: inline-block;
+    margin-top: 24px;
+    color: #4a9eff;
+    text-decoration: none;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<h1>The Two Arrays: Adaptive Threshold</h1>
+<p class="subtitle">How Dead Signal learns your tapping speed using two sliding windows</p>
+
+<!-- ───── CONCEPT ───── -->
+<h2>The Problem</h2>
+<p>In morse code, a <strong>dit</strong> (short) is 1 unit and a <strong>dah</strong> (long) is 3 units. But "1 unit" means different things to different people — 80ms for a fast tapper, 300ms for a beginner. We need to figure out where <em>your</em> boundary is, and keep updating it as your speed changes.</p>
+
+<h2>The Solution: Two Sliding Windows</h2>
+<p>We maintain two separate arrays, each holding the last 20 durations:</p>
+
+<div class="diagram-box">
+  <!-- Dit array -->
+  <div class="array-section">
+    <div class="array-label">
+      <div class="dot" style="background:#4a9eff"></div>
+      <span style="color:#4a9eff">ditDurations[]</span>
+      <span style="color:#555; font-size:11px">— last 20 short presses (ms)</span>
+    </div>
+    <div class="array-row" id="dit-row">
+      <div class="array-avg-line" id="dit-avg-line" style="background:#4a9eff; bottom:0"></div>
+      <div class="array-avg-label" id="dit-avg-label" style="color:#4a9eff; bottom:0">avg: --</div>
+    </div>
+    <div class="array-index-row" id="dit-index-row"></div>
+  </div>
+
+  <!-- Dah array -->
+  <div class="array-section" style="margin-top:24px">
+    <div class="array-label">
+      <div class="dot" style="background:#ff6b4a"></div>
+      <span style="color:#ff6b4a">dahDurations[]</span>
+      <span style="color:#555; font-size:11px">— last 20 long presses (ms)</span>
+    </div>
+    <div class="array-row" id="dah-row">
+      <div class="array-avg-line" id="dah-avg-line" style="background:#ff6b4a; bottom:0"></div>
+      <div class="array-avg-label" id="dah-avg-label" style="color:#ff6b4a; bottom:0">avg: --</div>
+    </div>
+    <div class="array-index-row" id="dah-index-row"></div>
+  </div>
+</div>
+
+<!-- ───── THRESHOLD CALCULATION ───── -->
+<h2>The Threshold Calculation</h2>
+<div class="threshold-result">
+  <div style="font-size:12px; color:#888; margin-bottom:4px;">The boundary between dit and dah:</div>
+  <div class="threshold-formula">
+    threshold = (<span style="color:#4a9eff">avg_dit</span> + <span style="color:#ff6b4a">avg_dah</span>) / 2
+  </div>
+  <div>
+    <span class="threshold-value" id="thresh-value">200</span>
+    <span class="threshold-unit">ms</span>
+  </div>
+  <div style="font-size:11px; color:#555; margin-top:4px;" id="thresh-detail">waiting for taps...</div>
+</div>
+
+<!-- ───── NUMBER LINE ───── -->
+<h2>Where Everything Sits</h2>
+<p>This number line shows each sample as a dot, the averages, and the threshold boundary:</p>
+<div class="diagram-box">
+  <div id="number-line">
+    <div id="number-line-bar"></div>
+    <div id="nl-dit-zone" class="nl-zone" style="background:#4a9eff; left:0; width:50%"></div>
+    <div id="nl-dah-zone" class="nl-zone" style="background:#ff6b4a; left:50%; width:50%"></div>
+    <div id="nl-thresh-marker" class="nl-marker" style="left:50%; background:#ffd700; width:4px; height:24px; border-radius:2px; top:24px;">
+      <div class="nl-label above" style="color:#ffd700;">threshold</div>
+    </div>
+    <div id="nl-dit-avg" class="nl-marker" style="left:25%; background:#4a9eff;">
+      <div class="nl-label above" style="color:#4a9eff;">avg dit</div>
+    </div>
+    <div id="nl-dah-avg" class="nl-marker" style="left:75%; background:#ff6b4a;">
+      <div class="nl-label above" style="color:#ff6b4a;">avg dah</div>
+    </div>
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:10px; font-family:monospace; color:#444; margin:0 10px;">
+    <span>0ms</span>
+    <span id="nl-max-label">600ms</span>
+  </div>
+</div>
+
+<!-- ───── INTERACTIVE CONTROLS ───── -->
+<h2>Try It</h2>
+<p>Add samples and watch both arrays, the averages, and the threshold react:</p>
+
+<div class="controls">
+  <button class="ctrl-btn primary" onclick="addSample('dit', randomDit())">+ Dit (random)</button>
+  <button class="ctrl-btn danger" onclick="addSample('dah', randomDah())">+ Dah (random)</button>
+  <button class="ctrl-btn" onclick="addSample('dit', 60)">+ Fast dit (60ms)</button>
+  <button class="ctrl-btn" onclick="addSample('dah', 180)">+ Fast dah (180ms)</button>
+  <button class="ctrl-btn" onclick="addSample('dit', 250)">+ Slow dit (250ms)</button>
+  <button class="ctrl-btn" onclick="addSample('dah', 750)">+ Slow dah (750ms)</button>
+  <button class="ctrl-btn" onclick="resetAll()">Reset</button>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn primary" onclick="simulateWord('fast')">Simulate: Fast tapper</button>
+  <button class="ctrl-btn danger" onclick="simulateWord('slow')">Simulate: Slow tapper</button>
+  <button class="ctrl-btn" onclick="simulateWord('speedup')">Simulate: Speeding up</button>
+</div>
+
+<!-- Step log -->
+<div class="step-log" id="step-log">
+  <div class="s-info">Ready — add samples or run a simulation</div>
+</div>
+
+<!-- ───── SLIDING WINDOW EXPLANATION ───── -->
+<h2>Why a Sliding Window?</h2>
+<div class="diagram-box">
+  <p>Each array holds a <strong>maximum of 20 entries</strong>. When a 21st entry arrives:</p>
+  <div style="font-family:monospace; font-size:13px; margin:12px 0; line-height:2;">
+    <span style="color:#555;">[</span><span style="color:#ff6b4a;text-decoration:line-through;">80</span><span style="color:#555;">,</span>
+    <span style="color:#4a9eff;"> 90, 85, 100, 75, 95, 88, 82, 92, 78,</span><br>
+    <span style="color:#4a9eff;"> &nbsp;86, 91, 84, 79, 93, 87, 81, 96, 83, 89</span><span style="color:#555;">]</span>
+    <span style="color:#4a9eff;"> ← 77 (new)</span>
+  </div>
+  <p>The <strong>oldest entry gets evicted</strong> (<code>array.shift()</code>), and the new one is appended (<code>array.push()</code>). This means:</p>
+  <p>• The average always reflects <strong>recent behavior</strong>, not ancient history<br>
+     • If you speed up, the threshold drops within a few taps<br>
+     • If you slow down, the threshold rises just as quickly<br>
+     • 20 entries is the sweet spot — enough to smooth out noise, small enough to adapt fast</p>
+</div>
+
+<h2>The Three Phases</h2>
+<div class="diagram-box">
+  <div style="margin-bottom:12px;">
+    <span class="phase cold">Cold Start</span>
+    <span style="font-size:13px; color:#aaa;"> — fewer than 2 dits or 0 dahs</span>
+  </div>
+  <p>Uses hardcoded threshold of <code>200ms</code>. Classification is a guess. Every first-time user starts here.</p>
+
+  <div style="margin:16px 0 12px;">
+    <span class="phase warm">Calibrating</span>
+    <span style="font-size:13px; color:#aaa;"> — 2+ dits and 1+ dah collected</span>
+  </div>
+  <p>Threshold starts adapting. Still jumpy with few samples. The midpoint formula kicks in: <code>(avg_dit + avg_dah) / 2</code>.</p>
+
+  <div style="margin:16px 0 12px;">
+    <span class="phase hot">Calibrated</span>
+    <span style="font-size:13px; color:#aaa;"> — 5+ samples in each array</span>
+  </div>
+  <p>Threshold is stable and accurate. Smoothly tracks speed changes. WPM calculation becomes reliable.</p>
+</div>
+
+<a class="nav-link" href="how-it-works.html">← Back to How It Works</a>
+<span style="color:#333; margin:0 8px;">|</span>
+<a class="nav-link" href="index.html">← Back to Prototype</a>
+
+<script>
+const ditDurations = [];
+const dahDurations = [];
+let threshold = 200;
+const MAX_WINDOW = 20;
+const MAX_DISPLAY_MS = 600; // scale for bar heights and number line
+
+const ditRow = document.getElementById('dit-row');
+const dahRow = document.getElementById('dah-row');
+const ditIndexRow = document.getElementById('dit-index-row');
+const dahIndexRow = document.getElementById('dah-index-row');
+const ditAvgLine = document.getElementById('dit-avg-line');
+const ditAvgLabel = document.getElementById('dit-avg-label');
+const dahAvgLine = document.getElementById('dah-avg-line');
+const dahAvgLabel = document.getElementById('dah-avg-label');
+const threshValue = document.getElementById('thresh-value');
+const threshDetail = document.getElementById('thresh-detail');
+const stepLog = document.getElementById('step-log');
+
+function randomDit() { return Math.round(70 + Math.random() * 80); }
+function randomDah() { return Math.round(250 + Math.random() * 200); }
+
+function log(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  stepLog.appendChild(div);
+  stepLog.scrollTop = stepLog.scrollHeight;
+}
+
+function avg(arr) {
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function renderArrays() {
+  // Clear cells (keep avg line)
+  ditRow.querySelectorAll('.array-cell').forEach(c => c.remove());
+  dahRow.querySelectorAll('.array-cell').forEach(c => c.remove());
+  ditIndexRow.innerHTML = '';
+  dahIndexRow.innerHTML = '';
+
+  const maxMs = Math.max(MAX_DISPLAY_MS, ...ditDurations, ...dahDurations);
+  const rowH = 78;
+
+  // Render dit cells
+  for (let i = 0; i < MAX_WINDOW; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'array-cell';
+    if (i < ditDurations.length) {
+      const v = ditDurations[i];
+      const h = (v / maxMs) * rowH;
+      cell.style.height = h + 'px';
+      cell.style.background = '#4a9eff';
+      if (i === ditDurations.length - 1) cell.classList.add('newest');
+      if (i === 0 && ditDurations.length === MAX_WINDOW) cell.classList.add('fading');
+      const val = document.createElement('div');
+      val.className = 'val';
+      val.textContent = Math.round(v);
+      cell.appendChild(val);
+    } else {
+      cell.style.height = '2px';
+      cell.style.background = '#1a1a1a';
+    }
+    ditRow.insertBefore(cell, ditAvgLine);
+
+    const idx = document.createElement('div');
+    idx.className = 'array-index';
+    idx.textContent = i < ditDurations.length ? i : '';
+    ditIndexRow.appendChild(idx);
+  }
+
+  // Render dah cells
+  for (let i = 0; i < MAX_WINDOW; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'array-cell';
+    if (i < dahDurations.length) {
+      const v = dahDurations[i];
+      const h = (v / maxMs) * rowH;
+      cell.style.height = h + 'px';
+      cell.style.background = '#ff6b4a';
+      if (i === dahDurations.length - 1) cell.classList.add('newest');
+      if (i === 0 && dahDurations.length === MAX_WINDOW) cell.classList.add('fading');
+      const val = document.createElement('div');
+      val.className = 'val';
+      val.textContent = Math.round(v);
+      cell.appendChild(val);
+    } else {
+      cell.style.height = '2px';
+      cell.style.background = '#1a1a1a';
+    }
+    dahRow.insertBefore(cell, dahAvgLine);
+
+    const idx = document.createElement('div');
+    idx.className = 'array-index';
+    idx.textContent = i < dahDurations.length ? i : '';
+    dahIndexRow.appendChild(idx);
+  }
+
+  // Average lines
+  const avgDit = avg(ditDurations);
+  const avgDah = avg(dahDurations);
+
+  if (ditDurations.length > 0) {
+    const h = (avgDit / maxMs) * rowH;
+    ditAvgLine.style.bottom = h + 'px';
+    ditAvgLine.style.display = 'block';
+    ditAvgLabel.style.bottom = (h + 4) + 'px';
+    ditAvgLabel.textContent = 'avg: ' + Math.round(avgDit) + 'ms';
+    ditAvgLabel.style.display = 'block';
+  } else {
+    ditAvgLine.style.display = 'none';
+    ditAvgLabel.style.display = 'none';
+  }
+
+  if (dahDurations.length > 0) {
+    const h = (avgDah / maxMs) * rowH;
+    dahAvgLine.style.bottom = h + 'px';
+    dahAvgLine.style.display = 'block';
+    dahAvgLabel.style.bottom = (h + 4) + 'px';
+    dahAvgLabel.textContent = 'avg: ' + Math.round(avgDah) + 'ms';
+    dahAvgLabel.style.display = 'block';
+  } else {
+    dahAvgLine.style.display = 'none';
+    dahAvgLabel.style.display = 'none';
+  }
+
+  // Threshold
+  if (ditDurations.length >= 2 && dahDurations.length >= 1) {
+    threshold = (avgDit + avgDah) / 2;
+    threshDetail.textContent = '(' + Math.round(avgDit) + ' + ' + Math.round(avgDah) + ') / 2 = ' + Math.round(threshold) + 'ms';
+  } else {
+    threshDetail.textContent = 'need 2+ dits and 1+ dah to calibrate (using default 200ms)';
+  }
+  threshValue.textContent = Math.round(threshold);
+
+  // Number line
+  updateNumberLine(maxMs);
+
+  // Update max label
+  document.getElementById('nl-max-label').textContent = maxMs + 'ms';
+}
+
+function updateNumberLine(maxMs) {
+  const avgDit = avg(ditDurations);
+  const avgDah = avg(dahDurations);
+  const nlWidth = 100; // percentage
+
+  // Remove old sample dots
+  document.querySelectorAll('.nl-sample').forEach(d => d.remove());
+
+  const nl = document.getElementById('number-line');
+
+  // Plot individual samples
+  ditDurations.forEach((v, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'nl-sample';
+    dot.style.cssText = `position:absolute; width:6px; height:6px; border-radius:50%; background:#4a9eff; opacity:0.4; top:33px; left:${(v/maxMs)*100}%; transform:translateX(-50%); z-index:1;`;
+    nl.appendChild(dot);
+  });
+  dahDurations.forEach((v, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'nl-sample';
+    dot.style.cssText = `position:absolute; width:6px; height:6px; border-radius:50%; background:#ff6b4a; opacity:0.4; top:33px; left:${(v/maxMs)*100}%; transform:translateX(-50%); z-index:1;`;
+    nl.appendChild(dot);
+  });
+
+  // Markers
+  if (ditDurations.length > 0) {
+    document.getElementById('nl-dit-avg').style.left = (avgDit / maxMs * 100) + '%';
+    document.getElementById('nl-dit-avg').style.display = 'block';
+  } else {
+    document.getElementById('nl-dit-avg').style.display = 'none';
+  }
+  if (dahDurations.length > 0) {
+    document.getElementById('nl-dah-avg').style.left = (avgDah / maxMs * 100) + '%';
+    document.getElementById('nl-dah-avg').style.display = 'block';
+  } else {
+    document.getElementById('nl-dah-avg').style.display = 'none';
+  }
+
+  const threshPct = threshold / maxMs * 100;
+  document.getElementById('nl-thresh-marker').style.left = threshPct + '%';
+  document.getElementById('nl-dit-zone').style.width = threshPct + '%';
+  document.getElementById('nl-dah-zone').style.left = threshPct + '%';
+  document.getElementById('nl-dah-zone').style.width = (100 - threshPct) + '%';
+}
+
+function addSample(type, duration) {
+  const arr = type === 'dit' ? ditDurations : dahDurations;
+  const color = type === 'dit' ? 's-dit' : 's-dah';
+  let evicted = null;
+
+  if (arr.length >= MAX_WINDOW) {
+    evicted = arr.shift();
+    log(`<span class="s-evict">  ↩ evicted oldest: ${Math.round(evicted)}ms (window full at ${MAX_WINDOW})</span>`);
+  }
+
+  arr.push(duration);
+  log(`<span class="${color}">+ ${type}: ${Math.round(duration)}ms</span> → <span class="${color}">${type}Durations[${arr.length - 1}]</span> (${arr.length}/${MAX_WINDOW})`);
+
+  const avgDit = avg(ditDurations);
+  const avgDah = avg(dahDurations);
+  if (ditDurations.length >= 2 && dahDurations.length >= 1) {
+    const newThresh = (avgDit + avgDah) / 2;
+    log(`<span class="s-thresh">  → threshold = (${Math.round(avgDit)} + ${Math.round(avgDah)}) / 2 = ${Math.round(newThresh)}ms</span>`);
+  }
+
+  renderArrays();
+}
+
+function resetAll() {
+  ditDurations.length = 0;
+  dahDurations.length = 0;
+  threshold = 200;
+  stepLog.innerHTML = '<div class="s-info">Reset — arrays cleared, threshold back to 200ms</div>';
+  renderArrays();
+}
+
+function simulateWord(mode) {
+  resetAll();
+  let samples;
+
+  if (mode === 'fast') {
+    log('<div class="s-info">▶ Simulating fast tapper (~20 WPM): "SOS"</div>');
+    samples = [
+      ['dit', 60], ['dit', 55], ['dit', 65],   // S = ...
+      ['dah', 195], ['dah', 180], ['dah', 200], // O = ---
+      ['dit', 58], ['dit', 62], ['dit', 55],    // S = ...
+    ];
+  } else if (mode === 'slow') {
+    log('<div class="s-info">▶ Simulating slow tapper (~5 WPM): "SOS"</div>');
+    samples = [
+      ['dit', 240], ['dit', 260], ['dit', 250],
+      ['dah', 780], ['dah', 720], ['dah', 750],
+      ['dit', 245], ['dit', 255], ['dit', 235],
+    ];
+  } else {
+    log('<div class="s-info">▶ Simulating speed-up: starts slow, gets faster</div>');
+    samples = [
+      ['dit', 300], ['dah', 900], ['dit', 280], ['dah', 850],
+      ['dit', 200], ['dah', 600], ['dit', 180], ['dah', 540],
+      ['dit', 120], ['dah', 360], ['dit', 100], ['dah', 300],
+      ['dit', 80], ['dah', 240], ['dit', 70], ['dah', 210],
+    ];
+  }
+
+  let i = 0;
+  function next() {
+    if (i >= samples.length) {
+      log('<div class="s-info">▶ Simulation complete</div>');
+      return;
+    }
+    const [type, dur] = samples[i];
+    addSample(type, dur);
+    i++;
+    setTimeout(next, 300);
+  }
+  next();
+}
+
+// Initial render
+renderArrays();
+</script>
+
+</body>
+</html>
