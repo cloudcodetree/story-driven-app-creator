@@ -76,6 +76,129 @@ The system synthesizes all answers into:
 - Recommended first steps
 - Open questions remaining
 
+### Stage 7: Ticket Generation (Continuous)
+Goal: Maintain a living backlog that evolves with the conversation.
+
+**This stage runs continuously from the moment core features are identified — not just at the end.**
+
+Tickets are saved to `tickets/[idea-slug]/` as individual markdown files. The backlog updates
+whenever a decision changes scope, adds features, removes features, or shifts priorities.
+
+#### Ticket Types and Formats
+
+**Epic** — A large body of work that contains multiple stories.
+```markdown
+# [EPIC] Epic Title
+
+## Description
+[High-level description of this body of work]
+
+## Goal
+[What completing this epic achieves]
+
+## Stories
+- [ ] [STORY-001] Story title
+- [ ] [STORY-002] Story title
+
+## Priority: [Critical | High | Medium | Low]
+## Status: [Backlog | In Progress | Done]
+```
+
+**User Story** — A feature described from the user's perspective.
+```markdown
+# [STORY-XXX] Story Title
+
+## User Story
+As a [type of user],
+I want to [action/goal],
+so that [benefit/value].
+
+## Acceptance Criteria
+- [ ] Given [context], when [action], then [expected result]
+- [ ] Given [context], when [action], then [expected result]
+
+## Technical Notes
+[Implementation hints, constraints, dependencies]
+
+## Epic: [Parent epic name]
+## Priority: [Critical | High | Medium | Low]
+## Points: [1 | 2 | 3 | 5 | 8 | 13]
+## Status: [Backlog | Ready | In Progress | Done]
+```
+
+**Task** — Technical work that isn't user-facing.
+```markdown
+# [TASK-XXX] Task Title
+
+## Description
+[What needs to be done and why]
+
+## Done When
+- [ ] [Concrete completion criteria]
+
+## Dependencies
+- [Other tickets this depends on]
+
+## Epic: [Parent epic name]
+## Priority: [Critical | High | Medium | Low]
+## Points: [1 | 2 | 3 | 5 | 8]
+## Status: [Backlog | Ready | In Progress | Done]
+```
+
+**Spike** — Research or investigation with a timebox.
+```markdown
+# [SPIKE-XXX] Spike Title
+
+## Question
+[What are we trying to answer?]
+
+## Timebox
+[Hours or days allocated]
+
+## Expected Output
+[What deliverable comes out of this — a decision, a prototype, a doc]
+
+## Epic: [Parent epic name]
+## Priority: [Critical | High | Medium | Low]
+## Status: [Backlog | In Progress | Done]
+```
+
+**Bug** — Something that doesn't work as specified.
+```markdown
+# [BUG-XXX] Bug Title
+
+## Description
+[What's broken]
+
+## Steps to Reproduce
+1. [Step]
+2. [Step]
+
+## Expected Behavior
+[What should happen]
+
+## Actual Behavior
+[What actually happens]
+
+## Priority: [Critical | High | Medium | Low]
+## Status: [Backlog | In Progress | Done]
+```
+
+#### Ticket Management Rules
+
+1. **Generate tickets as features emerge** — don't wait for the spec to be complete.
+   When a core feature is identified during refinement, create the epic and initial stories.
+2. **Update tickets when scope changes** — if the user pivots, narrows, or expands,
+   update affected tickets. Mark removed scope as cancelled, add new tickets for new scope.
+3. **Maintain a backlog index** — keep `tickets/[idea-slug]/BACKLOG.md` as a master list
+   of all tickets organized by epic, with status indicators.
+4. **Number tickets sequentially** — STORY-001, TASK-001, SPIKE-001, BUG-001, etc.
+5. **Assign points based on relative complexity** — use Fibonacci (1, 2, 3, 5, 8, 13).
+   A 1-point story is trivially simple. A 13-point story should probably be broken down.
+6. **Prioritize based on the validation plan** — tickets that test the riskiest assumptions
+   should be highest priority. Build the scariest thing first.
+7. **Link dependencies** — if a story can't start until another is done, say so.
+
 ## Refinement Behavior Rules
 
 ### Adaptivity
